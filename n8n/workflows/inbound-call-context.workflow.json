@@ -1,0 +1,102 @@
+{
+  "name": "AI Voice - Inbound Call Context",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-voice/inbound-context",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-inbound-context",
+      "name": "Inbound Context Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst phone = body.from_number || body.caller_number || body.phone || '';\nreturn [{ json: { call_id: body.call_id || body.id || '', phone, raw: body } }];"
+      },
+      "id": "normalize-payload",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "filterGroupsUi": {
+          "filterGroupsValues": [
+            {
+              "filtersUi": {
+                "filterValues": [
+                  {
+                    "propertyName": "phone",
+                    "operator": "EQ",
+                    "value": "={{$json.phone}}"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "properties": ["firstname", "lastname", "email", "phone", "lifecyclestage", "hubspot_owner_id"]
+        }
+      },
+      "id": "search-hubspot-contact",
+      "name": "Search HubSpot Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "HubSpot Private App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const contacts = Array.isArray($json.results) ? $json.results : [];\nconst contact = contacts[0] || null;\nconst context = contact ? {\n  caller_type: 'existing_customer',\n  crm_contact_id: contact.id,\n  first_name: contact.properties?.firstname || '',\n  last_name: contact.properties?.lastname || '',\n  email: contact.properties?.email || '',\n  phone: contact.properties?.phone || '',\n  lifecycle_stage: contact.properties?.lifecyclestage || '',\n  hubspot_owner_id: contact.properties?.hubspot_owner_id || ''\n} : {\n  caller_type: 'new_lead',\n  crm_contact_id: '',\n  first_name: '',\n  last_name: '',\n  email: '',\n  phone: $('Normalize Payload').first().json.phone,\n  lifecycle_stage: 'lead',\n  hubspot_owner_id: ''\n};\nreturn [{ json: { dynamic_variables: context } }];"
+      },
+      "id": "build-agent-context",
+      "name": "Build Agent Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      },
+      "id": "respond-context",
+      "name": "Respond With Context",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Inbound Context Webhook": {
+      "main": [[{ "node": "Normalize Payload", "type": "main", "index": 0 }]]
+    },
+    "Normalize Payload": {
+      "main": [[{ "node": "Search HubSpot Contact", "type": "main", "index": 0 }]]
+    },
+    "Search HubSpot Contact": {
+      "main": [[{ "node": "Build Agent Context", "type": "main", "index": 0 }]]
+    },
+    "Build Agent Context": {
+      "main": [[{ "node": "Respond With Context", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "starter-inbound-context"
+}
+

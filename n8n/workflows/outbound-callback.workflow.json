@@ -1,0 +1,110 @@
+{
+  "name": "AI Voice - Outbound Callback",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  contact_id: $json.contact_id || '',\n  to_number: $json.to_number || '',\n  first_name: $json.first_name || '',\n  reason_for_call: $json.reason_for_call || 'following up on your enquiry',\n  consent_to_call: $json.consent_to_call !== false,\n  dnc: $json.dnc === true,\n  attempts_today: $json.attempts_today || 0\n}}];"
+      },
+      "id": "prepare-callback",
+      "name": "Prepare Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.consent_to_call}}",
+              "value2": true
+            },
+            {
+              "value1": "={{!$json.dnc}}",
+              "value2": true
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{$json.attempts_today}}",
+              "operation": "smaller",
+              "value2": 3
+            }
+          ]
+        }
+      },
+      "id": "eligibility-check",
+      "name": "Eligibility Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.retellai.com/v2/create-phone-call",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from_number\": $env.RETELL_FROM_NUMBER,\n  \"to_number\": $json.to_number,\n  \"override_agent_id\": $env.RETELL_OUTBOUND_AGENT_ID,\n  \"retell_llm_dynamic_variables\": {\n    \"first_name\": $json.first_name,\n    \"reason_for_call\": $json.reason_for_call,\n    \"hubspot_contact_id\": $json.contact_id\n  },\n  \"metadata\": {\n    \"source\": \"n8n_outbound_callback\",\n    \"hubspot_contact_id\": $json.contact_id\n  }\n}"
+      },
+      "id": "create-outbound-call",
+      "name": "Create Outbound AI Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "Retell API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_CHAT_ID}}",
+        "text": "=Outbound AI callback skipped for {{$json.to_number}}. Consent: {{$json.consent_to_call}}, DNC: {{$json.dnc}}, Attempts today: {{$json.attempts_today}}"
+      },
+      "id": "telegram-skipped",
+      "name": "Telegram Skipped Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [960, 420],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Prepare Callback", "type": "main", "index": 0 }]]
+    },
+    "Prepare Callback": {
+      "main": [[{ "node": "Eligibility Check", "type": "main", "index": 0 }]]
+    },
+    "Eligibility Check": {
+      "main": [
+        [{ "node": "Create Outbound AI Call", "type": "main", "index": 0 }],
+        [{ "node": "Telegram Skipped Alert", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "starter-outbound-callback"
+}
+

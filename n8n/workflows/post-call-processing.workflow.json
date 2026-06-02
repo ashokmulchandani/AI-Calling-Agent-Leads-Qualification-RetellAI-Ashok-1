@@ -1,0 +1,207 @@
+{
+  "name": "AI Voice - Post Call Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-voice/post-call",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook-post-call",
+      "name": "Post Call Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst transcript = body.transcript || body.call?.transcript || body.call_analysis?.transcript || '';\nconst call = body.call || body;\nreturn [{ json: {\n  call_id: call.call_id || call.id || body.call_id || '',\n  direction: call.direction || body.direction || '',\n  from_number: call.from_number || body.from_number || '',\n  to_number: call.to_number || body.to_number || '',\n  started_at: call.started_at || body.started_at || '',\n  ended_at: call.ended_at || body.ended_at || '',\n  duration_seconds: call.duration_seconds || body.duration_seconds || 0,\n  transcript,\n  recording_url: call.recording_url || body.recording_url || '',\n  known_contact_context: body.known_contact_context || {},\n  raw: body\n}}];"
+      },
+      "id": "normalize-call",
+      "name": "Normalize Call Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AZURE_OPENAI_ENDPOINT}}/openai/deployments/{{$env.AZURE_OPENAI_DEPLOYMENT}}/chat/completions?api-version={{$env.AZURE_OPENAI_API_VERSION}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a CRM operations analyst. Return strict JSON only. Extract intent, entities, sentiment, summary, next action, task fields, escalation flag, and confidence from the call payload. Do not invent missing details.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": JSON.stringify($json)\n    }\n  ],\n  \"temperature\": 0.1,\n  \"response_format\": { \"type\": \"json_object\" }\n}"
+      },
+      "id": "azure-openai-analysis",
+      "name": "Azure OpenAI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "Azure OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $json.choices?.[0]?.message?.content || '{}';\nlet analysis;\ntry { analysis = JSON.parse(content); } catch (e) { analysis = { parse_error: true, raw_content: content }; }\nreturn [{ json: { ...$('Normalize Call Payload').first().json, analysis } }];"
+      },
+      "id": "parse-analysis",
+      "name": "Parse Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "email": "={{$json.analysis.entities.email || ''}}",
+        "additionalFields": {
+          "phone": "={{$json.analysis.entities.phone || $json.from_number}}",
+          "firstname": "={{($json.analysis.entities.name || '').split(' ')[0] || ''}}",
+          "lastname": "={{($json.analysis.entities.name || '').split(' ').slice(1).join(' ') || ''}}"
+        }
+      },
+      "id": "upsert-hubspot-contact",
+      "name": "Upsert HubSpot Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "HubSpot Private App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $('Parse Analysis').first().json.analysis;\nconst base = $('Parse Analysis').first().json;\nconst contactId = $json.id || $json.vid || $json.properties?.hs_object_id || '';\nconst note = `AI Voice Call Summary\\n\\nDirection: ${base.direction}\\nCaller Type: ${a.caller_type || ''}\\nPrimary Intent: ${a.primary_intent || ''}\\nSentiment: ${a.sentiment?.label || ''} (${a.sentiment?.score ?? ''})\\nLead Quality: ${a.lead_quality || ''}\\nEscalation Required: ${a.human_escalation_required ? 'Yes' : 'No'}\\n\\nSummary:\\n${a.summary || ''}\\n\\nCaptured Details:\\nName: ${a.entities?.name || ''}\\nEmail: ${a.entities?.email || ''}\\nPhone: ${a.entities?.phone || base.from_number || ''}\\nCompany: ${a.entities?.company || ''}\\nLocation: ${a.entities?.location || ''}\\nService Interest: ${a.entities?.service_interest || ''}\\nBudget: ${a.entities?.budget || ''}\\nTimeline: ${a.entities?.timeline || ''}\\nPreferred Callback: ${a.entities?.preferred_callback_time || ''}\\n\\nQuestions Asked:\\n${(a.questions_asked || []).map(q => '- ' + q).join('\\n')}\\n\\nObjections / Concerns:\\n${(a.objections || []).map(o => '- ' + o).join('\\n')}\\n\\nRecommended Next Step:\\n${a.next_action || ''}\\n\\nRecording:\\n${base.recording_url || ''}`;\nconst due = new Date();\nif (a.task_due_rule === 'same_business_hour') due.setHours(due.getHours() + 1);\nelse if (a.task_due_rule === 'two_business_hours') due.setHours(due.getHours() + 2);\nelse if (a.task_due_rule === 'next_business_day') due.setDate(due.getDate() + 1);\nelse due.setDate(due.getDate() + 3);\nreturn [{ json: { ...base, hubspot_contact: $json, hubspot_contact_id: contactId, crm_note: note, task_due_iso: due.toISOString() } }];"
+      },
+      "id": "build-crm-note",
+      "name": "Build CRM Note And Task Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/notes",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"properties\": {\n    \"hs_timestamp\": new Date().toISOString(),\n    \"hs_note_body\": $json.crm_note\n  }\n}"
+      },
+      "id": "create-hubspot-note",
+      "name": "Create HubSpot Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 300],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "HubSpot Private App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$('Parse Analysis').first().json.analysis.task_required}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "task-required-check",
+      "name": "Task Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/tasks",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"properties\": {\n    \"hs_timestamp\": $('Build CRM Note And Task Fields').first().json.task_due_iso,\n    \"hs_task_subject\": $('Parse Analysis').first().json.analysis.task_subject || 'Follow up after AI voice call',\n    \"hs_task_body\": $('Parse Analysis').first().json.analysis.task_body || $('Parse Analysis').first().json.analysis.next_action || 'Review AI voice call and follow up.',\n    \"hs_task_status\": \"NOT_STARTED\",\n    \"hs_task_priority\": ($('Parse Analysis').first().json.analysis.task_priority === 'urgent' || $('Parse Analysis').first().json.analysis.task_priority === 'high') ? 'HIGH' : 'MEDIUM'\n  }\n}"
+      },
+      "id": "create-hubspot-task",
+      "name": "Create HubSpot Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 220],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "HubSpot Private App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_CHAT_ID}}",
+        "text": "=AI Voice Call Processed\\n\\nIntent: {{$('Parse Analysis').first().json.analysis.primary_intent}}\\nSentiment: {{$('Parse Analysis').first().json.analysis.sentiment.label}}\\nLead Quality: {{$('Parse Analysis').first().json.analysis.lead_quality}}\\nNext Action: {{$('Parse Analysis').first().json.analysis.next_action}}"
+      },
+      "id": "telegram-alert",
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2400, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Post Call Webhook": {
+      "main": [[{ "node": "Normalize Call Payload", "type": "main", "index": 0 }]]
+    },
+    "Normalize Call Payload": {
+      "main": [[{ "node": "Azure OpenAI Analysis", "type": "main", "index": 0 }]]
+    },
+    "Azure OpenAI Analysis": {
+      "main": [[{ "node": "Parse Analysis", "type": "main", "index": 0 }]]
+    },
+    "Parse Analysis": {
+      "main": [[{ "node": "Upsert HubSpot Contact", "type": "main", "index": 0 }]]
+    },
+    "Upsert HubSpot Contact": {
+      "main": [[{ "node": "Build CRM Note And Task Fields", "type": "main", "index": 0 }]]
+    },
+    "Build CRM Note And Task Fields": {
+      "main": [[{ "node": "Create HubSpot Note", "type": "main", "index": 0 }]]
+    },
+    "Create HubSpot Note": {
+      "main": [[{ "node": "Task Required?", "type": "main", "index": 0 }]]
+    },
+    "Task Required?": {
+      "main": [
+        [{ "node": "Create HubSpot Task", "type": "main", "index": 0 }],
+        [{ "node": "Telegram Alert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create HubSpot Task": {
+      "main": [[{ "node": "Telegram Alert", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "starter-post-call-processing"
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CallAnalysis",
+  "type": "object",
+  "required": [
+    "call_id",
+    "caller_type",
+    "primary_intent",
+    "sentiment",
+    "lead_quality",
+    "entities",
+    "summary",
+    "next_action",
+    "task_required",
+    "human_escalation_required",
+    "confidence"
+  ],
+  "properties": {
+    "call_id": { "type": "string" },
+    "caller_type": {
+      "type": "string",
+      "enum": ["new_lead", "existing_customer", "partner", "unknown", "spam_or_wrong_number"]
+    },
+    "primary_intent": { "type": "string" },
+    "secondary_intents": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sentiment": {
+      "type": "object",
+      "required": ["label", "score"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": ["positive", "neutral", "confused", "frustrated", "angry"]
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "lead_quality": {
+      "type": "string",
+      "enum": ["hot", "warm", "cold", "not_qualified", "not_applicable"]
+    },
+    "entities": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "company": { "type": "string" },
+        "location": { "type": "string" },
+        "service_interest": { "type": "string" },
+        "product_interest": { "type": "string" },
+        "budget": { "type": "string" },
+        "timeline": { "type": "string" },
+        "urgency": { "type": "string" },
+        "preferred_callback_time": { "type": "string" },
+        "existing_customer_identifier": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "summary": { "type": "string" },
+    "questions_asked": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "objections": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "next_action": { "type": "string" },
+    "task_required": { "type": "boolean" },
+    "task_subject": { "type": "string" },
+    "task_body": { "type": "string" },
+    "task_priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "urgent"]
+    },
+    "task_due_rule": {
+      "type": "string",
+      "enum": ["same_business_hour", "two_business_hours", "next_business_day", "three_business_days", "none"]
+    },
+    "human_escalation_required": { "type": "boolean" },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "additionalProperties": false
+}
+
