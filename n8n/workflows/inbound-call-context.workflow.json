@@ -52,7 +52,7 @@
       "position": [720, 300],
       "credentials": {
         "hubspotAppToken": {
-          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "id": "k1kb4x5CjahByTDN",
           "name": "HubSpot Private App"
         }
       }

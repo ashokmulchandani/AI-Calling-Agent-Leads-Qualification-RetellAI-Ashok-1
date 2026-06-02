@@ -55,7 +55,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from_number\": $env.RETELL_FROM_NUMBER,\n  \"to_number\": $json.to_number,\n  \"override_agent_id\": $env.RETELL_OUTBOUND_AGENT_ID,\n  \"retell_llm_dynamic_variables\": {\n    \"first_name\": $json.first_name,\n    \"reason_for_call\": $json.reason_for_call,\n    \"hubspot_contact_id\": $json.contact_id\n  },\n  \"metadata\": {\n    \"source\": \"n8n_outbound_callback\",\n    \"hubspot_contact_id\": $json.contact_id\n  }\n}"
+        "jsonBody": "={\n  \"from_number\": \"+61XXXXXXXXXX\",\n  \"to_number\": $json.to_number,\n  \"override_agent_id\": \"agent_983e86d248294d5fc54f5551b0\",\n  \"retell_llm_dynamic_variables\": {\n    \"first_name\": $json.first_name,\n    \"reason_for_call\": $json.reason_for_call,\n    \"hubspot_contact_id\": $json.contact_id\n  },\n  \"metadata\": {\n    \"source\": \"n8n_outbound_callback\",\n    \"hubspot_contact_id\": $json.contact_id\n  }\n}"
       },
       "id": "create-outbound-call",
       "name": "Create Outbound AI Call",
@@ -64,14 +64,14 @@
       "position": [960, 220],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "id": "6Vt6M6R5wma8ovL8",
           "name": "Retell API Key"
         }
       }
     },
     {
       "parameters": {
-        "chatId": "={{$env.TELEGRAM_CHAT_ID}}",
+        "chatId": "1414560298",
         "text": "=Outbound AI callback skipped for {{$json.to_number}}. Consent: {{$json.consent_to_call}}, DNC: {{$json.dnc}}, Attempts today: {{$json.attempts_today}}"
       },
       "id": "telegram-skipped",
@@ -81,7 +81,7 @@
       "position": [960, 420],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_N8N_CREDENTIAL_ID",
+          "id": "vZzbzI1YiyjFFiwz",
           "name": "Telegram Bot"
         }
       }
