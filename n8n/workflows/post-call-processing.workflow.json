@@ -26,7 +26,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://testashok1.openai.azure.com/openai/deployments/testashok1-gpt-4o-mini/chat/completions?api-version=2024-02-01",
+        "url": "https://testashok1.cognitiveservices.azure.com/openai/deployments/Test-Ashok-1-gpt-4o/chat/completions?api-version=2025-01-01-preview",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -40,7 +40,7 @@
       "position": [720, 300],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "lzvG7ijvLRZo0mIN",
+          "id": "jjUOHftcBqLwwjjm",
           "name": "Azure OpenAI API Key"
         }
       }
